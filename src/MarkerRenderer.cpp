@@ -66,11 +66,12 @@ static ImU32 ToImColor(uint32_t argb, float globalAlpha)
 static float FadeAlpha(float dist, float fadeNear, float fadeFar,
                        float globalFadeStart, float globalMaxDist)
 {
-    float near = (fadeNear >= 0.f) ? fadeNear : globalFadeStart;
-    float far  = (fadeFar  >= 0.f) ? fadeFar  : globalMaxDist;
-    if (dist >= far)  return 0.f;
-    if (dist <= near) return 1.f;
-    return 1.f - (dist - near) / (far - near);
+    // NOTE: 'near' and 'far' are Windows macros — use different names.
+    float distNear = (fadeNear >= 0.f) ? fadeNear : globalFadeStart;
+    float distFar  = (fadeFar  >= 0.f) ? fadeFar  : globalMaxDist;
+    if (dist >= distFar)  return 0.f;
+    if (dist <= distNear) return 1.f;
+    return 1.f - (dist - distNear) / (distFar - distNear);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
