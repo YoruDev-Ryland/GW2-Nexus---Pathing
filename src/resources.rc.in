@@ -1,0 +1,4 @@
+// Win32 resource file — generated from resources.rc.in by CMake.
+// The @...@ tokens are substituted with absolute paths so that rc.exe
+// can find the PNG regardless of the working directory it is invoked from.
+101 PNG "@CMAKE_CURRENT_SOURCE_DIR@/src/icon.png"

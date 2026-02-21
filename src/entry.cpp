@@ -1,0 +1,162 @@
+#include "Shared.h"
+#include "Settings.h"
+#include "PackManager.h"
+#include "MarkerRenderer.h"
+#include "UI.h"
+
+#include <imgui.h>
+#include <windows.h>
+#include <cstring>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DllMain
+// ─────────────────────────────────────────────────────────────────────────────
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason, LPVOID /*reserved*/)
+{
+    switch (ul_reason)
+    {
+        case DLL_PROCESS_ATTACH:
+            Self = hModule;
+            DisableThreadLibraryCalls(hModule);
+            break;
+        case DLL_PROCESS_DETACH:
+            break;
+    }
+    return TRUE;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Keybind handler — plain C function pointer, no captures
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void ProcessKeybind(const char* aIdentifier, bool aIsRelease)
+{
+    if (aIsRelease) return;
+
+    if (strcmp(aIdentifier, "KB_PATHING_TOGGLEWIN") == 0)
+    {
+        g_Settings.ShowWindow = !g_Settings.ShowWindow;
+        g_Settings.Save();
+    }
+    else if (strcmp(aIdentifier, "KB_PATHING_TOGGLEMARKERS") == 0)
+    {
+        g_Settings.RenderMarkers = !g_Settings.RenderMarkers;
+        g_Settings.Save();
+    }
+    else if (strcmp(aIdentifier, "KB_PATHING_TOGGLETRAILS") == 0)
+    {
+        g_Settings.RenderTrails = !g_Settings.RenderTrails;
+        g_Settings.Save();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ImGui render callbacks
+// ─────────────────────────────────────────────────────────────────────────────
+
+// RT_Render: called every frame inside the ImGui frame.
+static void Render()
+{
+    // World-space marker and trail rendering (drawn onto the background draw list)
+    MarkerRenderer::Render();
+
+    // Pack manager / category tree window
+    UI::RenderWindow();
+}
+
+// RT_OptionsRender: called when the Nexus Options panel is showing.
+static void RenderOptions()
+{
+    UI::RenderOptions();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Addon lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
+
+static void AddonLoad(AddonAPI_t* aApi)
+{
+    APIDefs = aApi;
+
+    // ── Share ImGui context (must be first two ImGui calls) ───────────────────
+    ImGui::SetCurrentContext(static_cast<ImGuiContext*>(aApi->ImguiContext));
+    ImGui::SetAllocatorFunctions(
+        reinterpret_cast<void*(*)(size_t, void*)>(aApi->ImguiMalloc),
+        reinterpret_cast<void(*)(void*, void*)>(aApi->ImguiFree));
+
+    // ── Grab shared MumbleLink pointers ───────────────────────────────────────
+    MumbleLink  = static_cast<Mumble::LinkedMem*>(aApi->DataLink_Get(DL_MUMBLE_LINK));
+    MumbleIdent = static_cast<Mumble::Identity*>(aApi->DataLink_Get(DL_MUMBLE_LINK_IDENTITY));
+
+    // ── Load persisted settings ────────────────────────────────────────────────
+    g_Settings.Load();
+
+    // ── Register render callbacks ─────────────────────────────────────────────
+    aApi->GUI_Register(RT_Render,        Render);
+    aApi->GUI_Register(RT_OptionsRender, RenderOptions);
+
+    // ── Register keybinds ─────────────────────────────────────────────────────
+    aApi->InputBinds_RegisterWithString("KB_PATHING_TOGGLEWIN",     ProcessKeybind, "(null)");
+    aApi->InputBinds_RegisterWithString("KB_PATHING_TOGGLEMARKERS", ProcessKeybind, "(null)");
+    aApi->InputBinds_RegisterWithString("KB_PATHING_TOGGLETRAILS",  ProcessKeybind, "(null)");
+
+    // ── Load icon and add quick-access button ─────────────────────────────────
+    aApi->Textures_GetOrCreateFromResource("ICON_PATHING",       101, Self);
+    aApi->Textures_GetOrCreateFromResource("ICON_PATHING_HOVER", 101, Self);
+    aApi->QuickAccess_Add("QA_PATHING",
+                          "ICON_PATHING",
+                          "ICON_PATHING_HOVER",
+                          "KB_PATHING_TOGGLEWIN",
+                          "Pathing");
+
+    // ── Start loading packs (background thread) ────────────────────────────────
+    PackManager::Init();
+
+    aApi->Log(LOGL_INFO, "Pathing", "Loaded.");
+}
+
+static void AddonUnload()
+{
+    if (!APIDefs) return;
+
+    // ── Save state ────────────────────────────────────────────────────────────
+    g_Settings.Save();
+    PackManager::Shutdown(); // joins background thread + saves category state
+
+    // ── Deregister everything registered in AddonLoad ─────────────────────────
+    APIDefs->GUI_Deregister(Render);
+    APIDefs->GUI_Deregister(RenderOptions);
+
+    APIDefs->InputBinds_Deregister("KB_PATHING_TOGGLEWIN");
+    APIDefs->InputBinds_Deregister("KB_PATHING_TOGGLEMARKERS");
+    APIDefs->InputBinds_Deregister("KB_PATHING_TOGGLETRAILS");
+
+    APIDefs->QuickAccess_Remove("QA_PATHING");
+
+    APIDefs    = nullptr;
+    MumbleLink = nullptr;
+    MumbleIdent= nullptr;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GetAddonDef — the only symbol Nexus looks for
+// ─────────────────────────────────────────────────────────────────────────────
+
+static AddonDefinition_t s_AddonDef{};
+
+extern "C" __declspec(dllexport) AddonDefinition_t* GetAddonDef()
+{
+    s_AddonDef.Signature   = 0x50415448; // "PATH" in ASCII
+    s_AddonDef.APIVersion  = NEXUS_API_VERSION;
+    s_AddonDef.Name        = "Pathing";
+    s_AddonDef.Version     = { 1, 0, 0, 0 };
+    s_AddonDef.Author      = ""; // fill in your name
+    s_AddonDef.Description = "TacO / BlishHUD compatible pathing pack renderer for Nexus.";
+    s_AddonDef.Load        = AddonLoad;
+    s_AddonDef.Unload      = AddonUnload;
+    s_AddonDef.Flags       = AF_None;
+    s_AddonDef.Provider    = UP_GitHub;
+    s_AddonDef.UpdateLink  = "https://github.com/"; // fill in your repo URL
+    return &s_AddonDef;
+}

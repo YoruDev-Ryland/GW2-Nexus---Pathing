@@ -1,0 +1,64 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+    tags:     [ 'v*.*.*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build DLL (MSVC / Windows)
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G "Ninja" `
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+            -DCMAKE_CXX_COMPILER=cl `
+            -DCMAKE_C_COMPILER=cl
+        shell: pwsh
+
+      - name: Build
+        run: cmake --build build --config RelWithDebInfo --parallel
+        shell: pwsh
+
+      # Rolling "latest" pre-release — updates on every push to main
+      - name: Update Latest Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Build
+          body: "Automated build from the latest commit on `main`.\nFor stable versioned releases see the tagged releases below."
+          files: |
+            build/Pathing.dll
+            build/Pathing.pdb
+          prerelease: true
+          draft: false
+
+      # Versioned release — only when ./release.sh vX.Y.Z pushes a tag
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/Pathing.dll
+            build/Pathing.pdb
+          generate_release_notes: true
+          draft: false
