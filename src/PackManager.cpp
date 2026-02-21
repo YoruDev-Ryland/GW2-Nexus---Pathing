@@ -63,7 +63,7 @@ static std::string PacksDirStatic()
 
 static std::string ExtractDirForPack(const std::string& packFile)
 {
-    // Extract to <addondir>\extract\<packname_no_ext>\
+    // Extract to <addondir>/extract/<packname_no_ext>/
     std::string base = packFile;
     // Grab just the filename without extension
     std::string filename = base;

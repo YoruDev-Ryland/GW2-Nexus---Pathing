@@ -8,7 +8,8 @@
 #include <string>
 #include <algorithm>
 #include <cctype>
-#include <windows.h>   // ShellExecuteA
+#include <windows.h>
+#include <shellapi.h>  // ShellExecuteA
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
