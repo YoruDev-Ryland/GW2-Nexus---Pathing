@@ -62,13 +62,18 @@ static void RenderOptions()
 static bool g_QaHidden       = false;
 static bool g_QaSavedMarkers = true;
 static bool g_QaSavedTrails  = true;
+static int  g_QaLastFrame    = -2; // last ImGui frame this callback was invoked
 
 static void RenderQAContextMenu()
 {
-    // IsWindowAppearing() is true only on the very first frame the popup is
-    // open.  We act then and immediately close, so no menu is ever visible —
-    // right-clicking the icon is a pure instant toggle.
-    if (ImGui::IsWindowAppearing())
+    int cur = ImGui::GetFrameCount();
+
+    // A gap of more than 1 frame means the popup was closed between calls,
+    // i.e. this is a genuine new right-click open — act exactly once.
+    bool freshOpen = (cur - g_QaLastFrame) > 1;
+    g_QaLastFrame = cur;
+
+    if (freshOpen)
     {
         if (!g_QaHidden)
         {

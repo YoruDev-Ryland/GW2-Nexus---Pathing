@@ -227,8 +227,8 @@ static void DrawTrails(ImDrawList* dl, const Mat4& viewProj,
                         dl->AddImageQuad(
                             (ImTextureID)(void*)texRes,
                             p1, p2, p3, p4,
-                            ImVec2(0.f, uvV),     ImVec2(0.f, uvVNext),
-                            ImVec2(1.f, uvVNext), ImVec2(1.f, uvV),
+                            ImVec2(0.f, uvVNext), ImVec2(0.f, uvV),
+                            ImVec2(1.f, uvV),     ImVec2(1.f, uvVNext),
                             tint);
                     }
                     else
