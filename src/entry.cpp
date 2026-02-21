@@ -181,12 +181,12 @@ extern "C" __declspec(dllexport) AddonDefinition_t* GetAddonDef()
     s_AddonDef.APIVersion  = NEXUS_API_VERSION;
     s_AddonDef.Name        = "Pathing";
     s_AddonDef.Version     = { 1, 0, 0, 2 };
-    s_AddonDef.Author      = ""; // fill in your name
+    s_AddonDef.Author      = "YoruDev-Ryland";
     s_AddonDef.Description = "TacO / BlishHUD compatible pathing pack renderer for Nexus.";
     s_AddonDef.Load        = AddonLoad;
     s_AddonDef.Unload      = AddonUnload;
     s_AddonDef.Flags       = AF_None;
     s_AddonDef.Provider    = UP_GitHub;
-    s_AddonDef.UpdateLink  = "https://github.com/"; // fill in your repo URL
+    s_AddonDef.UpdateLink  = "https://github.com/YoruDev-Ryland/GW2-Nexus---Pathing";
     return &s_AddonDef;
 }
