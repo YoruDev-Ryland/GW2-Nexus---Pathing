@@ -157,7 +157,7 @@ extern "C" __declspec(dllexport) AddonDefinition_t* GetAddonDef()
     s_AddonDef.Signature   = 0x50415448;
     s_AddonDef.APIVersion  = NEXUS_API_VERSION;
     s_AddonDef.Name        = "Pathing";
-    s_AddonDef.Version     = { 1, 0, 0, 3 };
+    s_AddonDef.Version     = { 1, 0, 1, 3 };
     s_AddonDef.Author      = "YoruDev-Ryland";
     s_AddonDef.Description = "TacO / BlishHUD compatible pathing pack renderer for Nexus.";
     s_AddonDef.Load        = AddonLoad;
