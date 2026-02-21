@@ -102,8 +102,8 @@ static void AddonLoad(AddonAPI_t* aApi)
     aApi->InputBinds_RegisterWithString("KB_PATHING_TOGGLETRAILS",  ProcessKeybind, "(null)");
 
     // ── Load icon and add quick-access button ─────────────────────────────────
-    aApi->Textures_GetOrCreateFromResource("ICON_PATHING",       101, Self);
-    aApi->Textures_GetOrCreateFromResource("ICON_PATHING_HOVER", 101, Self);
+    aApi->Textures_GetOrCreateFromResource("ICON_PATHING",       104, Self);
+    aApi->Textures_GetOrCreateFromResource("ICON_PATHING_HOVER", 104, Self);
     aApi->QuickAccess_Add("QA_PATHING",
                           "ICON_PATHING",
                           "ICON_PATHING_HOVER",
