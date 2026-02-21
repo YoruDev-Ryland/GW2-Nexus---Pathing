@@ -449,10 +449,17 @@ bool LoadTrailBinary(const std::string& absolutePath, Trail& trail)
 
 bool LoadTrailBinaryMemory(const void* data, size_t size, Trail& trail)
 {
-    if (size < 4) return false;
+    // TacO .trl binary layout:
+    //   uint32_t  version  (always 0 — NOT the map ID)
+    //   uint32_t  mapId
+    //   float[3]  point[]  (12 bytes each)
+    if (size < 8) return false;
 
     const uint8_t* ptr = static_cast<const uint8_t*>(data);
-    // First 4 bytes: map ID embedded in the file
+    // Skip version field (first 4 bytes)
+    ptr  += 4;
+    size -= 4;
+    // Next 4 bytes: map ID
     uint32_t fileMapId = 0;
     memcpy(&fileMapId, ptr, 4);
     trail.mapId = fileMapId;

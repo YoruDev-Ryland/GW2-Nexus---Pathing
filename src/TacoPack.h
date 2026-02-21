@@ -25,6 +25,7 @@
 //   </OverlayData>
 //
 // TRL binary format:
+//   uint32_t  version     (4 bytes — always 0, must be skipped)
 //   uint32_t  mapId       (4 bytes)
 //   float[3]  point[0]   (12 bytes each)
 //   float[3]  point[1]
