@@ -123,9 +123,9 @@ static void DrawMarkers(ImDrawList* dl, const Mat4& viewProj,
         float distSq = DistSq(camPos, worldPos);
         float dist   = std::sqrt(distSq);
 
-        float maxDist = (poi->attribs.fadeFar >= 0.f) ? poi->attribs.fadeFar
-                                                       : g_Settings.MaxRenderDist;
-        if (dist > maxDist) continue;
+        // Global MaxRenderDist is always the hard clip — pack fadeFar only
+        // affects the fade alpha, never extends visibility beyond the slider.
+        if (dist > g_Settings.MaxRenderDist) continue;
 
         float sx, sy, depth;
         if (!WorldToScreen(worldPos, viewProj, screenW, screenH, sx, sy, depth))
@@ -204,9 +204,12 @@ static void DrawTrails(ImDrawList* dl, const Mat4& viewProj,
         {
             Vec3 worldPos{ tp.x, tp.y, tp.z };
 
-            float dist = std::sqrt(DistSq(camPos, worldPos));
-            float maxDist = (trail->attribs.fadeFar >= 0.f)
-                            ? trail->attribs.fadeFar : g_Settings.MaxRenderDist;
+            float distSq = DistSq(camPos, worldPos);
+            float dist   = std::sqrt(distSq);
+            // Global MaxRenderDist is always the hard clip for trails too.
+            float maxDist = g_Settings.MaxRenderDist;
+            if ((trail->attribs.fadeFar >= 0.f) && (trail->attribs.fadeFar < maxDist))
+                maxDist = trail->attribs.fadeFar;
             if (dist > maxDist) { hasPrev = false; continue; }
 
             float sx, sy, depth;

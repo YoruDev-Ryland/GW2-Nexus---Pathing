@@ -208,10 +208,11 @@ void UI::RenderOptions()
     // ── Distances ─────────────────────────────────────────────────────────────
     ImGui::TextDisabled("Distances (world units)");
     if (ImGui::SliderFloat("Max render distance##maxrd",
-                           &g_Settings.MaxRenderDist, 100.f, 10000.f))
+                           &g_Settings.MaxRenderDist, 50.f, 10000.f))
     {
-        // Clamp fade start to at most max distance
-        g_Settings.FadeStartDist = std::min(g_Settings.FadeStartDist, g_Settings.MaxRenderDist);
+        // Keep fade start at or below the new max
+        if (g_Settings.FadeStartDist > g_Settings.MaxRenderDist)
+            g_Settings.FadeStartDist = g_Settings.MaxRenderDist;
         changed = true;
     }
     if (ImGui::SliderFloat("Fade start distance##fadesd",
@@ -223,8 +224,8 @@ void UI::RenderOptions()
 
     // ── Screen size limits ────────────────────────────────────────────────────
     ImGui::TextDisabled("Screen size limits (pixels)");
-    changed |= ImGui::SliderFloat("Min icon size##mnicsz", &g_Settings.MinScreenSize,  1.f, 32.f);
-    changed |= ImGui::SliderFloat("Max icon size##mxicsz", &g_Settings.MaxScreenSize, 16.f, 256.f);
+    changed |= ImGui::SliderFloat("Min icon size##mnicsz", &g_Settings.MinScreenSize,  1.f,  64.f);
+    changed |= ImGui::SliderFloat("Max icon size##mxicsz", &g_Settings.MaxScreenSize, 16.f, 512.f);
     ImGui::Spacing();
 
     // ── Behaviour ─────────────────────────────────────────────────────────────

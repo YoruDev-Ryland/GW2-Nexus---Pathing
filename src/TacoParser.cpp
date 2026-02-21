@@ -326,26 +326,33 @@ static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out)
     // Trails
     for (const pugi::xml_node& n : poisNode.children("Trail"))
     {
-        uint32_t mapId = AttrUInt(n, "MapID", 0);
-        if (mapId == 0) continue;
-
         Trail trail;
-        trail.mapId         = mapId;
         trail.type          = AttrStr(n, "type");
         trail.trailDataFile = AttrStr(n, "trailData");
         if (trail.trailDataFile.empty()) trail.trailDataFile = AttrStr(n, "TrailData");
+        if (trail.trailDataFile.empty()) continue; // no data file — skip
 
         trail.attribs = trail.type.empty() ? MarkerAttribs{}
                                             : ResolveTypeAttribs(out.categories, trail.type);
         ReadAttribs(n, trail.attribs);
 
-        // Load the binary trail data if the extracted file exists
+        // TacO <Trail> elements carry NO MapID attribute — the map ID is the
+        // first uint32 in the .trl binary file itself.  Load the binary first
+        // so we can read the map ID from it.
         if (!trail.trailDataFile.empty())
         {
             std::string absPath = out.ResolveFile(trail.trailDataFile);
             if (!absPath.empty())
-                LoadTrailBinary(absPath, trail);
+            {
+                LoadTrailBinary(absPath, trail); // fills trail.points AND trail.mapId
+            }
         }
+
+        // Also accept an explicit MapID attribute if present (non-standard packs)
+        uint32_t xmlMapId = AttrUInt(n, "MapID", 0);
+        if (xmlMapId != 0) trail.mapId = xmlMapId;
+
+        if (trail.mapId == 0 || trail.points.empty()) continue;
 
         out.trails.push_back(std::move(trail));
     }
@@ -403,9 +410,10 @@ bool LoadTrailBinaryMemory(const void* data, size_t size, Trail& trail)
     if (size < 4) return false;
 
     const uint8_t* ptr = static_cast<const uint8_t*>(data);
-    // First 4 bytes: map ID (can differ from the XML MapID, use XML value)
-    // uint32_t fileMapId;
-    // memcpy(&fileMapId, ptr, 4);
+    // First 4 bytes: map ID embedded in the file
+    uint32_t fileMapId = 0;
+    memcpy(&fileMapId, ptr, 4);
+    trail.mapId = fileMapId;
     ptr  += 4;
     size -= 4;
 
