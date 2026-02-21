@@ -26,28 +26,58 @@ static constexpr ImU32  kDefaultColor  = 0xFFFFFFFF;
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Build the combined view-projection matrix from current MumbleLink camera data.
+//
+// GW2 uses a LEFT-HANDED coordinate system (same as DirectX):
+//   +X = East,  +Y = Up,  +Z = forward (into the scene)
+// The view matrix row vectors are derived as:
+//   right   = worldUp x forward   (LHS cross product — reversed argument order vs RHS)
+//   up      = forward x right     (re-orthogonalised)
+//   forward = CameraFront         (positive Z in view space)
+// The perspective projection maps to LHS NDC: w_clip = z_view (positive = in front).
 static Mat4 BuildViewProj(float screenW, float screenH)
 {
-    // Camera vectors from MumbleLink
-    Vec3 camPos  { MumbleLink->CameraPosition.X,
-                   MumbleLink->CameraPosition.Y,
-                   MumbleLink->CameraPosition.Z };
-    Vec3 camFront{ MumbleLink->CameraFront.X,
-                   MumbleLink->CameraFront.Y,
-                   MumbleLink->CameraFront.Z };
-    Vec3 camTop  { MumbleLink->CameraTop.X,
-                   MumbleLink->CameraTop.Y,
-                   MumbleLink->CameraTop.Z };
+    Vec3 camPos{ MumbleLink->CameraPosition.X,
+                 MumbleLink->CameraPosition.Y,
+                 MumbleLink->CameraPosition.Z };
+    Vec3 f     { MumbleLink->CameraFront.X,
+                 MumbleLink->CameraFront.Y,
+                 MumbleLink->CameraFront.Z };
+    Vec3 topHint{ MumbleLink->CameraTop.X,
+                  MumbleLink->CameraTop.Y,
+                  MumbleLink->CameraTop.Z };
 
-    // GW2 world up is Y+; if CameraTop is degenerate fall back to it
-    Vec3 worldUp = (camTop.LengthSq() > 0.01f) ? camTop : Vec3{0.f, 1.f, 0.f};
+    f = f.Normalised();
+    // Use world Y-up as the reference; CameraTop is preferred but we only use
+    // (0,1,0) as the stable fallback so we never pass the camera's own tilted
+    // up vector as the worldUp hint, which can produce drift on steep pitch.
+    Vec3 worldUp = (topHint.LengthSq() > 0.01f) ? topHint.Normalised()
+                                                  : Vec3{0.f, 1.f, 0.f};
+
+    // LHS: right = worldUp x forward
+    Vec3 r = worldUp.Cross(f).Normalised();
+    // Re-derive up so the three axes are perfectly orthogonal
+    Vec3 u = f.Cross(r).Normalised();
+
+    // LHS view matrix — maps world positions to view space (+Z = forward)
+    Mat4 view{};
+    view.m[0][0] = r.x; view.m[1][0] = r.y; view.m[2][0] = r.z; view.m[3][0] = -r.Dot(camPos);
+    view.m[0][1] = u.x; view.m[1][1] = u.y; view.m[2][1] = u.z; view.m[3][1] = -u.Dot(camPos);
+    view.m[0][2] = f.x; view.m[1][2] = f.y; view.m[2][2] = f.z; view.m[3][2] = -f.Dot(camPos);
+    view.m[3][3] = 1.f;
 
     float fov    = (MumbleIdent && MumbleIdent->FOV > 0.01f)
                    ? MumbleIdent->FOV : kDefaultFOV;
     float aspect = (screenH > 0.f) ? screenW / screenH : 1.7778f;
+    float tanHalfFov = std::tan(fov * 0.5f);
 
-    Mat4 view = LookAt(camPos, camFront, worldUp);
-    Mat4 proj = Perspective(fov, aspect, kNearClip, kFarClip);
+    // LHS perspective (DirectX style): w_clip = z_view (positive = in front of camera)
+    Mat4 proj{};
+    proj.m[0][0] = 1.f / (aspect * tanHalfFov);
+    proj.m[1][1] = 1.f / tanHalfFov;
+    proj.m[2][2] = kFarClip / (kFarClip - kNearClip);
+    proj.m[2][3] = 1.f;   // w_clip = z_view
+    proj.m[3][2] = -(kNearClip * kFarClip) / (kFarClip - kNearClip);
+
     return proj * view;
 }
 

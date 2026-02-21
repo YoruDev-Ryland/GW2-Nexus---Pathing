@@ -222,6 +222,8 @@ static void ReadAttribs(const pugi::xml_node& node, MarkerAttribs& a)
 }
 
 // ── Recursive MarkerCategory tree builder ────────────────────────────────────
+// Merges into existing siblings rather than appending, so categories defined
+// across multiple XML files inside one pack are deduplicated correctly.
 static void BuildCategoryTree(const pugi::xml_node& xmlNode,
                               std::vector<MarkerCategory>& siblings,
                               const MarkerAttribs& parentAttribs)
@@ -231,16 +233,40 @@ static void BuildCategoryTree(const pugi::xml_node& xmlNode,
         std::string name = AttrStr(child, "name");
         if (name.empty()) continue;
 
-        MarkerCategory cat;
-        cat.name        = name;
-        cat.displayName = AttrStr(child, "displayName");
-        if (cat.displayName.empty()) cat.displayName = name;
-        cat.attribs     = parentAttribs;   // start with parent values
-        ReadAttribs(child, cat.attribs);   // override with this node's values
-        cat.enabled     = true;
+        // Check if a sibling with this name already exists (from a prior XML file)
+        // and merge into it rather than creating a duplicate root node.
+        MarkerCategory* existing = nullptr;
+        for (auto& s : siblings)
+            if (_stricmp(s.name.c_str(), name.c_str()) == 0) { existing = &s; break; }
 
-        BuildCategoryTree(child, cat.children, cat.attribs);
-        siblings.push_back(std::move(cat));
+        if (!existing)
+        {
+            MarkerCategory cat;
+            cat.name    = name;
+            // TacO XML uses "DisplayName" (capital D and N); fall back to
+            // lower-case variant used by some older packs, then to internal name.
+            cat.displayName = AttrStr(child, "DisplayName");
+            if (cat.displayName.empty()) cat.displayName = AttrStr(child, "displayName");
+            if (cat.displayName.empty()) cat.displayName = name;
+            cat.attribs = parentAttribs;
+            ReadAttribs(child, cat.attribs);
+            cat.enabled = true;
+            siblings.push_back(std::move(cat));
+            existing = &siblings.back();
+        }
+        else
+        {
+            // Update the display name if the existing node still shows the raw name.
+            if (existing->displayName == existing->name)
+            {
+                std::string dn = AttrStr(child, "DisplayName");
+                if (dn.empty()) dn = AttrStr(child, "displayName");
+                if (!dn.empty()) existing->displayName = dn;
+            }
+        }
+
+        // Recurse into children of this XML node, merging into existing->children
+        BuildCategoryTree(child, existing->children, existing->attribs);
     }
 }
 
