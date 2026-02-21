@@ -9,14 +9,8 @@
 #include <algorithm>
 #include <cctype>
 #include <windows.h>
-#include <shellapi.h>  // ShellExecuteA
+#include <shellapi.h>
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Recursively draw a category tree with enable/disable checkboxes.
-// Returns true if any state changed.
 static bool DrawCategoryTree(std::vector<MarkerCategory>& cats,
                              bool parentEnabled,
                              int depth = 0)
@@ -26,13 +20,10 @@ static bool DrawCategoryTree(std::vector<MarkerCategory>& cats,
     {
         bool nodeEnabled = parentEnabled && cat.enabled;
 
-        // Build a unique imgui ID
         std::string label = cat.displayName + "##pcat_" + cat.name;
 
-        // Indent for depth
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + depth * 12.f);
 
-        // Checkbox
         bool nodeCb = cat.enabled;
         if (!parentEnabled)
         {
@@ -50,7 +41,6 @@ static bool DrawCategoryTree(std::vector<MarkerCategory>& cats,
         bool hasChildren = !cat.children.empty();
         if (hasChildren)
         {
-            // Draw as a tree node
             ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth;
             if (cat.expanded) flags |= ImGuiTreeNodeFlags_DefaultOpen;
 
@@ -65,16 +55,11 @@ static bool DrawCategoryTree(std::vector<MarkerCategory>& cats,
         }
         else
         {
-            // Leaf node — just show the label
             ImGui::TextUnformatted(cat.displayName.c_str());
         }
     }
     return changed;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Pack manager window
-// ─────────────────────────────────────────────────────────────────────────────
 
 void UI::RenderWindow()
 {
@@ -90,7 +75,6 @@ void UI::RenderWindow()
         return;
     }
 
-    // ── Header bar ────────────────────────────────────────────────────────────
     if (PackManager::IsLoading())
     {
         ImGui::TextColored(ImVec4(1.f, 0.75f, 0.f, 1.f), "Loading packs...");
@@ -120,7 +104,6 @@ void UI::RenderWindow()
 
     ImGui::Separator();
 
-    // ── Quick render toggles ──────────────────────────────────────────────────
     bool mChanged = false;
     mChanged |= ImGui::Checkbox("Show Markers", &g_Settings.RenderMarkers);
     ImGui::SameLine(150.f);
@@ -129,7 +112,6 @@ void UI::RenderWindow()
 
     ImGui::Separator();
 
-    // ── Pack list with collapsible category trees ─────────────────────────────
     ImGui::BeginChild("##pack_list", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
 
     auto& packs = PackManager::GetPacksMutable();
@@ -144,7 +126,6 @@ void UI::RenderWindow()
     {
         bool packChanged = false;
 
-        // Pack header — checkbox + collapsing header
         bool packEnabled = pack.enabled;
         if (ImGui::Checkbox(("##packena_" + pack.name).c_str(), &packEnabled))
         {
@@ -177,10 +158,6 @@ void UI::RenderWindow()
     ImGui::End();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Nexus options panel
-// ─────────────────────────────────────────────────────────────────────────────
-
 void UI::RenderOptions()
 {
     bool changed = false;
@@ -188,19 +165,16 @@ void UI::RenderOptions()
     ImGui::TextColored(ImVec4(0.8f, 0.8f, 1.f, 1.f), "Pathing Options");
     ImGui::Separator();
 
-    // ── Rendering toggles ─────────────────────────────────────────────────────
     ImGui::TextDisabled("Rendering");
     changed |= ImGui::Checkbox("Render markers in world", &g_Settings.RenderMarkers);
     changed |= ImGui::Checkbox("Render trails in world",  &g_Settings.RenderTrails);
     ImGui::Spacing();
 
-    // ── Opacity ───────────────────────────────────────────────────────────────
     ImGui::TextDisabled("Opacity");
     changed |= ImGui::SliderFloat("Marker opacity##mrkopac", &g_Settings.MarkerOpacity, 0.f, 1.f);
     changed |= ImGui::SliderFloat("Trail opacity##trloplac",  &g_Settings.TrailOpacity,  0.f, 1.f);
     ImGui::Spacing();
 
-    // ── Scale ─────────────────────────────────────────────────────────────────
     ImGui::TextDisabled("Scale");
     changed |= ImGui::SliderFloat("Marker scale##mrkscl", &g_Settings.MarkerScale, 0.1f, 5.f);
     changed |= ImGui::SliderFloat("Trail width (world units)##trlw",
@@ -212,12 +186,10 @@ void UI::RenderOptions()
         ImGui::SetTooltip("When enabled, trails become thinner with distance (like markers). Disable for constant-width trails.");
     ImGui::Spacing();
 
-    // ── Distances ─────────────────────────────────────────────────────────────
     ImGui::TextDisabled("Distances (world units)");
     if (ImGui::SliderFloat("Max render distance##maxrd",
                            &g_Settings.MaxRenderDist, 50.f, 10000.f))
     {
-        // Keep fade start at or below the new max (with a gap so fade is always visible)
         if (g_Settings.FadeStartDist >= g_Settings.MaxRenderDist)
             g_Settings.FadeStartDist = g_Settings.MaxRenderDist * 0.5f;
         changed = true;
@@ -232,13 +204,11 @@ void UI::RenderOptions()
         ImGui::SetTooltip("Markers/trails at this distance are fully opaque. Beyond this they fade out to max render distance.");
     ImGui::Spacing();
 
-    // ── Screen size limits ────────────────────────────────────────────────────
     ImGui::TextDisabled("Screen size limits (pixels)");
     changed |= ImGui::SliderFloat("Min icon size##mnicsz", &g_Settings.MinScreenSize,  1.f,  64.f);
     changed |= ImGui::SliderFloat("Max icon size##mxicsz", &g_Settings.MaxScreenSize, 16.f, 512.f);
     ImGui::Spacing();
 
-    // ── Behaviour ─────────────────────────────────────────────────────────────
     ImGui::TextDisabled("Behaviour");
     changed |= ImGui::Checkbox("Debug overlay", &g_Settings.ShowDebugInfo);
     if (ImGui::IsItemHovered())
@@ -247,7 +217,6 @@ void UI::RenderOptions()
 
     ImGui::Separator();
 
-    // ── Pack folder shortcut ──────────────────────────────────────────────────
     ImGui::TextDisabled("Packs folder:");
     ImGui::SameLine();
     std::string dir = PackManager::PacksDir();

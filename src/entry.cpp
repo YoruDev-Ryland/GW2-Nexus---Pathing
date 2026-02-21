@@ -8,10 +8,6 @@
 #include <windows.h>
 #include <cstring>
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DllMain
-// ─────────────────────────────────────────────────────────────────────────────
-
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason, LPVOID /*reserved*/)
 {
     switch (ul_reason)
@@ -25,10 +21,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason, LPVOID /*reserved*/)
     }
     return TRUE;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Keybind handler — plain C function pointer, no captures
-// ─────────────────────────────────────────────────────────────────────────────
 
 static void ProcessKeybind(const char* aIdentifier, bool aIsRelease)
 {
@@ -51,27 +43,18 @@ static void ProcessKeybind(const char* aIdentifier, bool aIsRelease)
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ImGui render callbacks
-// ─────────────────────────────────────────────────────────────────────────────
-
-// RT_Render: called every frame inside the ImGui frame.
 static void Render()
 {
-    // World-space marker and trail rendering (drawn onto the background draw list)
     MarkerRenderer::Render();
 
-    // Pack manager / category tree window
     UI::RenderWindow();
 }
 
-// RT_OptionsRender: called when the Nexus Options panel is showing.
 static void RenderOptions()
 {
     UI::RenderOptions();
 }
 
-// Quick-access right-click context menu — toggle markers and trails.
 static void RenderQAContextMenu()
 {
     if (ImGui::MenuItem("Show Markers", nullptr, g_Settings.RenderMarkers))
@@ -99,37 +82,27 @@ static void RenderQAContextMenu()
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Addon lifecycle
-// ─────────────────────────────────────────────────────────────────────────────
-
 static void AddonLoad(AddonAPI_t* aApi)
 {
     APIDefs = aApi;
 
-    // ── Share ImGui context (must be first two ImGui calls) ───────────────────
     ImGui::SetCurrentContext(static_cast<ImGuiContext*>(aApi->ImguiContext));
     ImGui::SetAllocatorFunctions(
         reinterpret_cast<void*(*)(size_t, void*)>(aApi->ImguiMalloc),
         reinterpret_cast<void(*)(void*, void*)>(aApi->ImguiFree));
 
-    // ── Grab shared MumbleLink pointers ───────────────────────────────────────
     MumbleLink  = static_cast<Mumble::LinkedMem*>(aApi->DataLink_Get(DL_MUMBLE_LINK));
     MumbleIdent = static_cast<Mumble::Identity*>(aApi->DataLink_Get(DL_MUMBLE_LINK_IDENTITY));
 
-    // ── Load persisted settings ────────────────────────────────────────────────
     g_Settings.Load();
 
-    // ── Register render callbacks ─────────────────────────────────────────────
     aApi->GUI_Register(RT_Render,        Render);
     aApi->GUI_Register(RT_OptionsRender, RenderOptions);
 
-    // ── Register keybinds ─────────────────────────────────────────────────────
     aApi->InputBinds_RegisterWithString("KB_PATHING_TOGGLEWIN",     ProcessKeybind, "(null)");
     aApi->InputBinds_RegisterWithString("KB_PATHING_TOGGLEMARKERS", ProcessKeybind, "(null)");
     aApi->InputBinds_RegisterWithString("KB_PATHING_TOGGLETRAILS",  ProcessKeybind, "(null)");
 
-    // ── Load icon and add quick-access button ─────────────────────────────────
     aApi->Textures_GetOrCreateFromResource("ICON_PATHING",       104, Self);
     aApi->Textures_GetOrCreateFromResource("ICON_PATHING_HOVER", 104, Self);
     aApi->QuickAccess_Add("QA_PATHING",
@@ -139,7 +112,6 @@ static void AddonLoad(AddonAPI_t* aApi)
                           "Pathing");
     aApi->QuickAccess_AddContextMenu("QA_PATHING_CTX", "QA_PATHING", RenderQAContextMenu);
 
-    // ── Start loading packs (background thread) ────────────────────────────────
     PackManager::Init();
 
     aApi->Log(LOGL_INFO, "Pathing", "Loaded.");
@@ -149,11 +121,9 @@ static void AddonUnload()
 {
     if (!APIDefs) return;
 
-    // ── Save state ────────────────────────────────────────────────────────────
     g_Settings.Save();
-    PackManager::Shutdown(); // joins background thread + saves category state
+    PackManager::Shutdown();
 
-    // ── Deregister everything registered in AddonLoad ─────────────────────────
     APIDefs->GUI_Deregister(Render);
     APIDefs->GUI_Deregister(RenderOptions);
 
@@ -168,16 +138,11 @@ static void AddonUnload()
     MumbleLink = nullptr;
     MumbleIdent= nullptr;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GetAddonDef — the only symbol Nexus looks for
-// ─────────────────────────────────────────────────────────────────────────────
-
 static AddonDefinition_t s_AddonDef{};
 
 extern "C" __declspec(dllexport) AddonDefinition_t* GetAddonDef()
 {
-    s_AddonDef.Signature   = 0x50415448; // "PATH" in ASCII
+    s_AddonDef.Signature   = 0x50415448;
     s_AddonDef.APIVersion  = NEXUS_API_VERSION;
     s_AddonDef.Name        = "Pathing";
     s_AddonDef.Version     = { 1, 0, 0, 2 };

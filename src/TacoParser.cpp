@@ -9,10 +9,6 @@
 #include <cstring>
 #include <charconv>
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TacoPack member implementations
-// ─────────────────────────────────────────────────────────────────────────────
-
 void MarkerAttribs::InheritFrom(const MarkerAttribs& p)
 {
     if (iconFile.empty()         && !p.iconFile.empty())     iconFile      = p.iconFile;
@@ -116,7 +112,7 @@ static bool IsCategoryEnabledImpl(const std::vector<MarkerCategory>& cats,
             return IsCategoryEnabledImpl(c.children, h, t);
         }
     }
-    return true; // unknown category — allow
+    return true;
 }
 
 bool TacoPack::IsCategoryEnabled(const std::string& typePath) const
@@ -128,27 +124,18 @@ bool TacoPack::IsCategoryEnabled(const std::string& typePath) const
     return IsCategoryEnabledImpl(categories, h, t);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TacoParser implementation
-// ─────────────────────────────────────────────────────────────────────────────
-
 namespace TacoParser
 {
 
 std::string NormalisePath(const std::string& raw)
 {
     std::string out = raw;
-    // Replace backslashes with forward slashes
     std::replace(out.begin(), out.end(), '\\', '/');
-    // Lowercase
     std::transform(out.begin(), out.end(), out.begin(),
                    [](unsigned char c){ return (char)std::tolower(c); });
-    // Strip leading slash
     if (!out.empty() && out[0] == '/') out.erase(0, 1);
     return out;
 }
-
-// ── Safe attribute helpers ────────────────────────────────────────────────────
 
 static float AttrFloat(const pugi::xml_node& n, const char* attr, float def)
 {
@@ -177,7 +164,6 @@ static std::string AttrStr(const pugi::xml_node& n, const char* attr)
     return a ? std::string(a.as_string()) : std::string{};
 }
 
-// Parse a hex colour string (e.g. "ffffffff" or "#ffffffff") to ARGB uint32.
 static uint32_t ParseColor(const pugi::xml_node& n, const char* attr, uint32_t def)
 {
     std::string s = AttrStr(n, attr);
@@ -192,11 +178,10 @@ static uint32_t ParseColor(const pugi::xml_node& n, const char* attr, uint32_t d
         else if (c >= 'a' && c <= 'f') v |= (c - 'a' + 10);
         else if (c >= 'A' && c <= 'F') v |= (c - 'A' + 10);
     }
-    if (s.size() == 6) v |= 0xFF000000u; // add full alpha if missing
+    if (s.size() == 6) v |= 0xFF000000u;
     return v;
 }
 
-// ── Read display attribs from any XML node ────────────────────────────────────
 static void ReadAttribs(const pugi::xml_node& node, MarkerAttribs& a)
 {
     std::string iconFile = AttrStr(node, "iconFile");
@@ -221,9 +206,6 @@ static void ReadAttribs(const pugi::xml_node& node, MarkerAttribs& a)
     if (node.attribute("resetLength"))  a.resetLength  = AttrInt(node,  "resetLength",   0);
 }
 
-// ── Recursive MarkerCategory tree builder ────────────────────────────────────
-// Merges into existing siblings rather than appending, so categories defined
-// across multiple XML files inside one pack are deduplicated correctly.
 static void BuildCategoryTree(const pugi::xml_node& xmlNode,
                               std::vector<MarkerCategory>& siblings,
                               const MarkerAttribs& parentAttribs)
@@ -233,8 +215,6 @@ static void BuildCategoryTree(const pugi::xml_node& xmlNode,
         std::string name = AttrStr(child, "name");
         if (name.empty()) continue;
 
-        // Check if a sibling with this name already exists (from a prior XML file)
-        // and merge into it rather than creating a duplicate root node.
         MarkerCategory* existing = nullptr;
         for (auto& s : siblings)
             if (_stricmp(s.name.c_str(), name.c_str()) == 0) { existing = &s; break; }
@@ -243,8 +223,6 @@ static void BuildCategoryTree(const pugi::xml_node& xmlNode,
         {
             MarkerCategory cat;
             cat.name    = name;
-            // TacO XML uses "DisplayName" (capital D and N); fall back to
-            // lower-case variant used by some older packs, then to internal name.
             cat.displayName = AttrStr(child, "DisplayName");
             if (cat.displayName.empty()) cat.displayName = AttrStr(child, "displayName");
             if (cat.displayName.empty()) cat.displayName = name;
@@ -256,7 +234,6 @@ static void BuildCategoryTree(const pugi::xml_node& xmlNode,
         }
         else
         {
-            // Update the display name if the existing node still shows the raw name.
             if (existing->displayName == existing->name)
             {
                 std::string dn = AttrStr(child, "DisplayName");
@@ -265,18 +242,15 @@ static void BuildCategoryTree(const pugi::xml_node& xmlNode,
             }
         }
 
-        // Recurse into children of this XML node, merging into existing->children
         BuildCategoryTree(child, existing->children, existing->attribs);
     }
 }
 
-// ── Collect effective attribs for a dot-separated type path ──────────────────
 static MarkerAttribs ResolveTypeAttribs(const std::vector<MarkerCategory>& cats,
                                         const std::string& typePath)
 {
     MarkerAttribs result;
 
-    // Walk each segment of the type path building up accumulated attribs
     const std::vector<MarkerCategory>* level = &cats;
     std::string remaining = typePath;
 
@@ -298,11 +272,9 @@ static MarkerAttribs ResolveTypeAttribs(const std::vector<MarkerCategory>& cats,
     return result;
 }
 
-// ── Parse a <POIs> block ──────────────────────────────────────────────────────
 static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out,
                       TacoParser::TrailLoadStats* stats = nullptr)
 {
-    // POIs
     for (const pugi::xml_node& n : poisNode.children("POI"))
     {
         uint32_t mapId = AttrUInt(n, "MapID", 0);
@@ -316,7 +288,6 @@ static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out,
         poi.type  = AttrStr(n, "type");
         poi.guid  = AttrStr(n, "GUID");
 
-        // Resolve attribs from category tree then override with inline attribs
         poi.attribs = poi.type.empty() ? MarkerAttribs{}
                                        : ResolveTypeAttribs(out.categories, poi.type);
         ReadAttribs(n, poi.attribs);
@@ -324,7 +295,6 @@ static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out,
         out.pois.push_back(std::move(poi));
     }
 
-    // Trails
     for (const pugi::xml_node& n : poisNode.children("Trail"))
     {
         if (stats) ++stats->xmlTrailNodes;
@@ -343,9 +313,6 @@ static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out,
                                             : ResolveTypeAttribs(out.categories, trail.type);
         ReadAttribs(n, trail.attribs);
 
-        // TacO <Trail> elements carry NO MapID attribute — the map ID is the
-        // first uint32 in the .trl binary file itself.  Load the binary first
-        // so we can read the map ID from it.
         std::string absPath = out.ResolveFile(trail.trailDataFile);
         if (absPath.empty())
         {
@@ -364,7 +331,6 @@ static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out,
             continue;
         }
 
-        // Also accept an explicit MapID attribute if present (non-standard packs)
         uint32_t xmlMapId = AttrUInt(n, "MapID", 0);
         if (xmlMapId != 0) trail.mapId = xmlMapId;
 
@@ -384,9 +350,6 @@ static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out,
     }
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
-
-// Helper: get the OverlayData root node from a parsed document.
 static pugi::xml_node GetOverlayRoot(const pugi::xml_document& doc)
 {
     pugi::xml_node root = doc.child("OverlayData");
@@ -417,16 +380,11 @@ void ParseXmlPois(const std::string& xmlContent, TacoPack& out,
         if (std::string(child.name()) == "POIs")
             ParsePois(child, out, stats);
     }
-    // Flat <POI>/<Trail> directly under root (non-standard but seen in the wild)
     ParsePois(root, out, stats);
 }
 
 void ParseXml(const std::string& xmlContent, TacoPack& out)
 {
-    // Single-pass: build categories then parse POIs/trails.
-    // For multi-file packs prefer the two-pass helpers (ParseXmlCategories +
-    // ParseXmlPois) so that all category definitions are available regardless
-    // of iteration order.
     ParseXmlCategories(xmlContent, out);
     ParseXmlPois(xmlContent, out, nullptr);
 }
@@ -449,25 +407,16 @@ bool LoadTrailBinary(const std::string& absolutePath, Trail& trail)
 
 bool LoadTrailBinaryMemory(const void* data, size_t size, Trail& trail)
 {
-    // TacO .trl binary layout:
-    //   uint32_t  version  (always 0 — NOT the map ID)
-    //   uint32_t  mapId
-    //   float[3]  point[]  (12 bytes each)
     if (size < 8) return false;
 
     const uint8_t* ptr = static_cast<const uint8_t*>(data);
-    // Skip version field (first 4 bytes)
     ptr  += 4;
     size -= 4;
-    // Next 4 bytes: map ID
     uint32_t fileMapId = 0;
     memcpy(&fileMapId, ptr, 4);
     trail.mapId = fileMapId;
     ptr  += 4;
     size -= 4;
-
-    // Truncate any leftover bytes rather than rejecting the whole file;
-    // some packs write a null-terminator or alignment padding at the end.
     size -= (size % 12);
     if (size == 0) return false;
 
@@ -486,4 +435,4 @@ bool LoadTrailBinaryMemory(const void* data, size_t size, Trail& trail)
     return true;
 }
 
-} // namespace TacoParser
+}
