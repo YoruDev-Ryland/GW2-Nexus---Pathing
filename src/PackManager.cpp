@@ -227,7 +227,6 @@ static void ParseExtractedXmls(TacoPack& pack)
         }
     }
 }
-}
 
 // Collect all icon / trail texture paths from a pack into the pending queue.
 // Called from the background loader — does NOT touch the Nexus API.
