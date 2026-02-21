@@ -24,8 +24,24 @@ void ParseXml(const std::string& xmlContent, TacoPack& out);
 // Pass 1: build only the MarkerCategory tree; do not parse POIs or Trails.
 void ParseXmlCategories(const std::string& xmlContent, TacoPack& out);
 
+// Diagnostic counters filled by ParseXmlPois — every reason a trail
+// element can be dropped is tracked separately so callers can log them.
+struct TrailLoadStats
+{
+    int xmlTrailNodes  = 0; // total <Trail> elements seen
+    int noDataAttr     = 0; // trailData attribute missing or empty
+    int fileNotFound   = 0; // ResolveFile returned empty (path key mismatch)
+    int binaryFailed   = 0; // LoadTrailBinary returned false
+    int noMapId        = 0; // mapId == 0 after binary load
+    int noPoints       = 0; // points vector empty after binary load
+    int loaded         = 0; // successfully added to pack
+    std::string sampleMissingPath; // first path that failed ResolveFile
+};
+
 // Pass 2: parse only POIs and Trails; assumes categories already built.
-void ParseXmlPois(const std::string& xmlContent, TacoPack& out);
+// stats is optional — pass nullptr if you don't need diagnostics.
+void ParseXmlPois(const std::string& xmlContent, TacoPack& out,
+                  TrailLoadStats* stats = nullptr);
 
 // Load the binary trail data from a .trl file on disk and fill trail.points.
 // Returns true on success.

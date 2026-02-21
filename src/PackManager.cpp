@@ -181,8 +181,52 @@ static void ParseExtractedXmls(TacoPack& pack)
         TacoParser::ParseXmlCategories(content, pack);
 
     // Pass 2 — parse POIs and Trails (category tree is now fully populated).
+    TacoParser::TrailLoadStats stats;
     for (const auto& content : xmlContents)
-        TacoParser::ParseXmlPois(content, pack);
+        TacoParser::ParseXmlPois(content, pack, &stats);
+
+    // Log trail load diagnostics so failures can be diagnosed.
+    if (APIDefs)
+    {
+        if (stats.xmlTrailNodes == 0)
+        {
+            APIDefs->Log(LOGL_INFO, "Pathing",
+                ("Trail parse [" + pack.name + "]: 0 <Trail> elements in any XML").c_str());
+        }
+        else
+        {
+            std::string msg = "Trail parse [" + pack.name + "]: "
+                + std::to_string(stats.xmlTrailNodes) + " nodes  "
+                + std::to_string(stats.loaded)        + " loaded  "
+                + std::to_string(stats.noDataAttr)    + " no-attr  "
+                + std::to_string(stats.fileNotFound)  + " file-notfound  "
+                + std::to_string(stats.binaryFailed)  + " binary-fail  "
+                + std::to_string(stats.noMapId)        + " no-mapid  "
+                + std::to_string(stats.noPoints)       + " no-points";
+            APIDefs->Log(LOGL_INFO, "Pathing", msg.c_str());
+
+            if (!stats.sampleMissingPath.empty())
+            {
+                APIDefs->Log(LOGL_WARNING, "Pathing",
+                    ("  Sample missing path: \"" + stats.sampleMissingPath + "\"").c_str());
+
+                // Show a few actual extractedFiles keys so the key format is visible.
+                int shown = 0;
+                for (const auto& [k, v] : pack.extractedFiles)
+                {
+                    if (k.size() < 4) continue;
+                    std::string ext = k.substr(k.size() - 4);
+                    if (ext == ".trl" || ext == ".xml")
+                    {
+                        APIDefs->Log(LOGL_WARNING, "Pathing",
+                            ("  ExtractKey sample: \"" + k + "\"").c_str());
+                        if (++shown >= 4) break;
+                    }
+                }
+            }
+        }
+    }
+}
 }
 
 // Collect all icon / trail texture paths from a pack into the pending queue.

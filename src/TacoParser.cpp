@@ -299,7 +299,8 @@ static MarkerAttribs ResolveTypeAttribs(const std::vector<MarkerCategory>& cats,
 }
 
 // ── Parse a <POIs> block ──────────────────────────────────────────────────────
-static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out)
+static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out,
+                      TacoParser::TrailLoadStats* stats = nullptr)
 {
     // POIs
     for (const pugi::xml_node& n : poisNode.children("POI"))
@@ -326,11 +327,17 @@ static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out)
     // Trails
     for (const pugi::xml_node& n : poisNode.children("Trail"))
     {
+        if (stats) ++stats->xmlTrailNodes;
+
         Trail trail;
         trail.type          = AttrStr(n, "type");
         trail.trailDataFile = AttrStr(n, "trailData");
         if (trail.trailDataFile.empty()) trail.trailDataFile = AttrStr(n, "TrailData");
-        if (trail.trailDataFile.empty()) continue; // no data file — skip
+        if (trail.trailDataFile.empty())
+        {
+            if (stats) ++stats->noDataAttr;
+            continue;
+        }
 
         trail.attribs = trail.type.empty() ? MarkerAttribs{}
                                             : ResolveTypeAttribs(out.categories, trail.type);
@@ -339,21 +346,40 @@ static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out)
         // TacO <Trail> elements carry NO MapID attribute — the map ID is the
         // first uint32 in the .trl binary file itself.  Load the binary first
         // so we can read the map ID from it.
-        if (!trail.trailDataFile.empty())
+        std::string absPath = out.ResolveFile(trail.trailDataFile);
+        if (absPath.empty())
         {
-            std::string absPath = out.ResolveFile(trail.trailDataFile);
-            if (!absPath.empty())
+            if (stats)
             {
-                LoadTrailBinary(absPath, trail); // fills trail.points AND trail.mapId
+                ++stats->fileNotFound;
+                if (stats->sampleMissingPath.empty())
+                    stats->sampleMissingPath = trail.trailDataFile;
             }
+            continue;
+        }
+
+        if (!LoadTrailBinary(absPath, trail))
+        {
+            if (stats) ++stats->binaryFailed;
+            continue;
         }
 
         // Also accept an explicit MapID attribute if present (non-standard packs)
         uint32_t xmlMapId = AttrUInt(n, "MapID", 0);
         if (xmlMapId != 0) trail.mapId = xmlMapId;
 
-        if (trail.mapId == 0 || trail.points.empty()) continue;
+        if (trail.mapId == 0)
+        {
+            if (stats) ++stats->noMapId;
+            continue;
+        }
+        if (trail.points.empty())
+        {
+            if (stats) ++stats->noPoints;
+            continue;
+        }
 
+        if (stats) ++stats->loaded;
         out.trails.push_back(std::move(trail));
     }
 }
@@ -378,7 +404,8 @@ void ParseXmlCategories(const std::string& xmlContent, TacoPack& out)
     BuildCategoryTree(root, out.categories, defaultAttribs);
 }
 
-void ParseXmlPois(const std::string& xmlContent, TacoPack& out)
+void ParseXmlPois(const std::string& xmlContent, TacoPack& out,
+                  TrailLoadStats* stats)
 {
     pugi::xml_document doc;
     if (!doc.load_string(xmlContent.c_str())) return;
@@ -388,10 +415,10 @@ void ParseXmlPois(const std::string& xmlContent, TacoPack& out)
     for (const pugi::xml_node& child : root.children())
     {
         if (std::string(child.name()) == "POIs")
-            ParsePois(child, out);
+            ParsePois(child, out, stats);
     }
     // Flat <POI>/<Trail> directly under root (non-standard but seen in the wild)
-    ParsePois(root, out);
+    ParsePois(root, out, stats);
 }
 
 void ParseXml(const std::string& xmlContent, TacoPack& out)
@@ -401,7 +428,7 @@ void ParseXml(const std::string& xmlContent, TacoPack& out)
     // ParseXmlPois) so that all category definitions are available regardless
     // of iteration order.
     ParseXmlCategories(xmlContent, out);
-    ParseXmlPois(xmlContent, out);
+    ParseXmlPois(xmlContent, out, nullptr);
 }
 
 bool LoadTrailBinary(const std::string& absolutePath, Trail& trail)
