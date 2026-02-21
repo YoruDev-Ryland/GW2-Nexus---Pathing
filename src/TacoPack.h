@@ -94,6 +94,10 @@ struct Trail
     std::string trailDataFile;
     MarkerAttribs attribs;
     std::vector<TrailPoint> points;
+    // Cumulative world-space arc length from point 0 to point i.
+    // arcLengths[0] == 0.  Populated once at load time so the renderer can
+    // compute stable UVs without accumulating per-frame.
+    std::vector<float> arcLengths;
     std::string texId;
 };
 

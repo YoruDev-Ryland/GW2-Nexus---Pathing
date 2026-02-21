@@ -149,16 +149,20 @@ static void DrawTrails(ImDrawList* dl, const Mat4& viewProj,
         if (trailAlpha < 0.01f) continue;
 
         void* texRes = !trail->texId.empty() ? GetTexResource(trail->texId.c_str()) : nullptr;
+        // tileSize in world units: one UV tile = one trail-diameter wide.
+        // Computed here so it's consistent between prevIdx and curIdx lookups.
+        float tileSize = g_Settings.TrailWidth * trail->attribs.trailScale * 2.f;
+        if (tileSize < 0.001f) tileSize = 0.001f;
 
         ImVec2 prevScreen{};
-        Vec3   prevWorld{};
         float  prevHalfW = 0.f;
         float  prevA     = 1.f;
         bool   hasPrev   = false;
-        float  uvV       = 0.f;
+        size_t prevIdx   = 0;
 
-        for (const TrailPoint& tp : trail->points)
+        for (size_t ptIdx = 0; ptIdx < trail->points.size(); ++ptIdx)
         {
+            const TrailPoint& tp = trail->points[ptIdx];
             Vec3 worldPos{ tp.x, tp.y, tp.z };
             float dist = std::sqrt(DistSq(camPos, worldPos));
 
@@ -211,13 +215,11 @@ static void DrawTrails(ImDrawList* dl, const Mat4& viewProj,
 
                     float avgA = (prevA + pointA) * 0.5f;
 
-                    float wdx = worldPos.x - prevWorld.x;
-                    float wdy = worldPos.y - prevWorld.y;
-                    float wdz = worldPos.z - prevWorld.z;
-                    float worldLen = std::sqrt(wdx * wdx + wdy * wdy + wdz * wdz);
-                    float tileSize = g_Settings.TrailWidth * trail->attribs.trailScale * 2.f;
-                    float dvRange  = (tileSize > 0.001f) ? (worldLen / tileSize) : 0.f;
-                    float uvVNext  = uvV + dvRange;
+                    // UV V-coords come directly from the precomputed arc length
+                    // table.  These are anchored to world positions and are
+                    // completely independent of camera, culling, or frame order.
+                    float uvV     = trail->arcLengths[prevIdx] / tileSize;
+                    float uvVNext = trail->arcLengths[ptIdx]   / tileSize;
 
                     if (texRes)
                     {
@@ -234,13 +236,11 @@ static void DrawTrails(ImDrawList* dl, const Mat4& viewProj,
                         ImU32 col = ToImColor(trail->attribs.trailColor, avgA);
                         dl->AddQuadFilled(p1, p2, p3, p4, col);
                     }
-
-                    uvV = uvVNext;
                 }
             }
 
             prevScreen = cur;
-            prevWorld  = worldPos;
+            prevIdx    = ptIdx;
             prevHalfW  = halfW;
             prevA      = pointA;
             hasPrev    = (pointA > 0.01f);

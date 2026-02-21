@@ -345,6 +345,21 @@ static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out,
             continue;
         }
 
+        // Precompute cumulative arc lengths so the renderer can look up stable
+        // world-anchored UV coordinates without per-frame accumulation.
+        {
+            const auto& pts = trail.points;
+            trail.arcLengths.resize(pts.size(), 0.f);
+            for (size_t i = 1; i < pts.size(); ++i)
+            {
+                float dx = pts[i].x - pts[i-1].x;
+                float dy = pts[i].y - pts[i-1].y;
+                float dz = pts[i].z - pts[i-1].z;
+                trail.arcLengths[i] = trail.arcLengths[i-1] +
+                                      std::sqrt(dx*dx + dy*dy + dz*dz);
+            }
+        }
+
         if (stats) ++stats->loaded;
         out.trails.push_back(std::move(trail));
     }

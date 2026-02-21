@@ -55,30 +55,37 @@ static void RenderOptions()
     UI::RenderOptions();
 }
 
+// ── Quick-access right-click toggle ───────────────────────────────────────────
+// Remembers the visibility state that was active before the user hid everything,
+// so a second right-click restores exactly that state (e.g. markers off but
+// trails on → hide → right-click again → trails on, markers still off).
+static bool g_QaHidden       = false;
+static bool g_QaSavedMarkers = true;
+static bool g_QaSavedTrails  = true;
+
 static void RenderQAContextMenu()
 {
-    if (ImGui::MenuItem("Show Markers", nullptr, g_Settings.RenderMarkers))
+    // IsWindowAppearing() is true only on the very first frame the popup is
+    // open.  We act then and immediately close, so no menu is ever visible —
+    // right-clicking the icon is a pure instant toggle.
+    if (ImGui::IsWindowAppearing())
     {
-        g_Settings.RenderMarkers = !g_Settings.RenderMarkers;
+        if (!g_QaHidden)
+        {
+            g_QaSavedMarkers         = g_Settings.RenderMarkers;
+            g_QaSavedTrails          = g_Settings.RenderTrails;
+            g_Settings.RenderMarkers = false;
+            g_Settings.RenderTrails  = false;
+            g_QaHidden               = true;
+        }
+        else
+        {
+            g_Settings.RenderMarkers = g_QaSavedMarkers;
+            g_Settings.RenderTrails  = g_QaSavedTrails;
+            g_QaHidden               = false;
+        }
         g_Settings.Save();
-    }
-    if (ImGui::MenuItem("Show Trails", nullptr, g_Settings.RenderTrails))
-    {
-        g_Settings.RenderTrails = !g_Settings.RenderTrails;
-        g_Settings.Save();
-    }
-    ImGui::Separator();
-    if (ImGui::MenuItem("Show All"))
-    {
-        g_Settings.RenderMarkers = true;
-        g_Settings.RenderTrails  = true;
-        g_Settings.Save();
-    }
-    if (ImGui::MenuItem("Hide All"))
-    {
-        g_Settings.RenderMarkers = false;
-        g_Settings.RenderTrails  = false;
-        g_Settings.Save();
+        ImGui::CloseCurrentPopup();
     }
 }
 
