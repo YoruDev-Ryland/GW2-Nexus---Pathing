@@ -203,6 +203,13 @@ void UI::RenderOptions()
     // ── Scale ─────────────────────────────────────────────────────────────────
     ImGui::TextDisabled("Scale");
     changed |= ImGui::SliderFloat("Marker scale##mrkscl", &g_Settings.MarkerScale, 0.1f, 5.f);
+    changed |= ImGui::SliderFloat("Trail width (world units)##trlw",
+                                  &g_Settings.TrailWidth, 0.1f, 5.f);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Width of trail ribbons in world units. Scales down with distance when perspective scale is on.");
+    changed |= ImGui::Checkbox("Trail perspective scale##trlpsc", &g_Settings.TrailPerspectiveScale);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("When enabled, trails become thinner with distance (like markers). Disable for constant-width trails.");
     ImGui::Spacing();
 
     // ── Distances ─────────────────────────────────────────────────────────────
@@ -210,16 +217,19 @@ void UI::RenderOptions()
     if (ImGui::SliderFloat("Max render distance##maxrd",
                            &g_Settings.MaxRenderDist, 50.f, 10000.f))
     {
-        // Keep fade start at or below the new max
-        if (g_Settings.FadeStartDist > g_Settings.MaxRenderDist)
-            g_Settings.FadeStartDist = g_Settings.MaxRenderDist;
+        // Keep fade start at or below the new max (with a gap so fade is always visible)
+        if (g_Settings.FadeStartDist >= g_Settings.MaxRenderDist)
+            g_Settings.FadeStartDist = g_Settings.MaxRenderDist * 0.5f;
         changed = true;
     }
     if (ImGui::SliderFloat("Fade start distance##fadesd",
-                           &g_Settings.FadeStartDist, 0.f, g_Settings.MaxRenderDist))
+                           &g_Settings.FadeStartDist, 0.f,
+                           g_Settings.MaxRenderDist * 0.95f))
     {
         changed = true;
     }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Markers/trails at this distance are fully opaque. Beyond this they fade out to max render distance.");
     ImGui::Spacing();
 
     // ── Screen size limits ────────────────────────────────────────────────────

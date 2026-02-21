@@ -36,6 +36,8 @@ void Settings::Load()
         MarkerOpacity    = j.value("MarkerOpacity",      MarkerOpacity);
         TrailOpacity     = j.value("TrailOpacity",       TrailOpacity);
         MarkerScale      = j.value("MarkerScale",        MarkerScale);
+        TrailWidth       = j.value("TrailWidth",         TrailWidth);
+        TrailPerspectiveScale = j.value("TrailPerspectiveScale", TrailPerspectiveScale);
         MaxRenderDist    = j.value("MaxRenderDist",      MaxRenderDist);
         FadeStartDist    = j.value("FadeStartDist",      FadeStartDist);
         MinScreenSize    = j.value("MinScreenSize",      MinScreenSize);
@@ -43,6 +45,12 @@ void Settings::Load()
         ShowDebugInfo    = j.value("ShowDebugInfo",      ShowDebugInfo);
         AutoHideInCombat = j.value("AutoHideInCombat",   AutoHideInCombat);
         AutoHideOnMount  = j.value("AutoHideOnMount",    AutoHideOnMount);
+
+        // Sanity clamp: fade start must be strictly less than max dist so
+        // there is always a visible fade zone.  Old saves with FadeStartDist
+        // == MaxRenderDist produce an empty fade range → everything full alpha.
+        if (FadeStartDist >= MaxRenderDist)
+            FadeStartDist = MaxRenderDist * 0.5f;
     }
     catch (...) { /* malformed JSON — keep defaults */ }
 }
@@ -60,6 +68,8 @@ void Settings::Save() const
     j["MarkerOpacity"]    = MarkerOpacity;
     j["TrailOpacity"]     = TrailOpacity;
     j["MarkerScale"]      = MarkerScale;
+    j["TrailWidth"]       = TrailWidth;
+    j["TrailPerspectiveScale"] = TrailPerspectiveScale;
     j["MaxRenderDist"]    = MaxRenderDist;
     j["FadeStartDist"]    = FadeStartDist;
     j["MinScreenSize"]    = MinScreenSize;

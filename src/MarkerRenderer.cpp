@@ -181,7 +181,7 @@ static void DrawMarkers(ImDrawList* dl, const Mat4& viewProj,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Draw trail breadcrumbs
+// Draw trail ribbon
 // ─────────────────────────────────────────────────────────────────────────────
 
 static void DrawTrails(ImDrawList* dl, const Mat4& viewProj,
@@ -189,6 +189,8 @@ static void DrawTrails(ImDrawList* dl, const Mat4& viewProj,
                        float screenW, float screenH,
                        const std::vector<const Trail*>& trails)
 {
+    float fov = (MumbleIdent && MumbleIdent->FOV > 0.01f) ? MumbleIdent->FOV : kDefaultFOV;
+
     for (const Trail* trail : trails)
     {
         if (trail->points.empty()) continue;
@@ -196,25 +198,22 @@ static void DrawTrails(ImDrawList* dl, const Mat4& viewProj,
         float trailAlpha = trail->attribs.alpha * g_Settings.TrailOpacity;
         if (trailAlpha < 0.01f) continue;
 
-        ImU32 lineCol = ToImColor(trail->attribs.trailColor, trailAlpha);
+        // Resolve the trail texture (may be empty — falls back to solid quad)
+        void* texRes = !trail->texId.empty() ? GetTexResource(trail->texId.c_str()) : nullptr;
 
-        // Draw line segments between sequential projected trail points.
-        // Also draw dots at each point so they show up even when the trail
-        // segments are very far apart.
+        // Per-segment state
         ImVec2 prevScreen{};
-        bool   hasPrev = false;
+        float  prevHalfW = 0.f;
+        float  prevA     = 1.f;
+        bool   hasPrev   = false;
+        float  uvV       = 0.f; // V-coord accumulator for texture tiling
 
         for (const TrailPoint& tp : trail->points)
         {
             Vec3 worldPos{ tp.x, tp.y, tp.z };
+            float dist = std::sqrt(DistSq(camPos, worldPos));
 
-            float distSq = DistSq(camPos, worldPos);
-            float dist   = std::sqrt(distSq);
-            // Global MaxRenderDist is always the hard clip for trails too.
-            float maxDist = g_Settings.MaxRenderDist;
-            if ((trail->attribs.fadeFar >= 0.f) && (trail->attribs.fadeFar < maxDist))
-                maxDist = trail->attribs.fadeFar;
-            if (dist > maxDist) { hasPrev = false; continue; }
+            if (dist > g_Settings.MaxRenderDist) { hasPrev = false; continue; }
 
             float sx, sy, depth;
             if (!WorldToScreen(worldPos, viewProj, screenW, screenH, sx, sy, depth))
@@ -223,36 +222,88 @@ static void DrawTrails(ImDrawList* dl, const Mat4& viewProj,
                 continue;
             }
 
-            float fadeAlpha = FadeAlpha(dist,
-                                        trail->attribs.fadeNear,
-                                        trail->attribs.fadeFar,
-                                        g_Settings.FadeStartDist,
-                                        g_Settings.MaxRenderDist);
-            float pointAlpha = trailAlpha * fadeAlpha;
-            if (pointAlpha < 0.01f) { hasPrev = false; continue; }
+            // ── Per-point half-width (world → screen pixels) ──────────────
+            float halfW;
+            if (g_Settings.TrailPerspectiveScale)
+            {
+                float ppu = (screenH * 0.5f) / (std::tan(fov * 0.5f) * std::max(dist, 0.1f));
+                halfW = g_Settings.TrailWidth * trail->attribs.trailScale * ppu;
+            }
+            else
+            {
+                // Fixed screen-pixel width (no perspective scaling)
+                halfW = g_Settings.TrailWidth * trail->attribs.trailScale * 3.f;
+            }
+            halfW = std::max(halfW, 1.f);
 
-            ImU32 col = ToImColor(trail->attribs.trailColor, pointAlpha);
+            // ── Per-point fade alpha ──────────────────────────────────────
+            float fadeA = FadeAlpha(dist,
+                                    trail->attribs.fadeNear,
+                                    trail->attribs.fadeFar,
+                                    g_Settings.FadeStartDist,
+                                    g_Settings.MaxRenderDist);
+            float pointA = trailAlpha * fadeA;
+
             ImVec2 cur{ sx, sy };
 
-            // Draw connecting line to previous point (if close enough in screen space)
-            if (hasPrev)
+            if (hasPrev && pointA > 0.01f)
             {
-                float dx = cur.x - prevScreen.x, dy = cur.y - prevScreen.y;
-                float screenDist = std::sqrt(dx*dx + dy*dy);
-                // Don't draw lines spanning the whole screen (trail wrap-around)
-                if (screenDist < screenW * 0.5f)
+                float dx = cur.x - prevScreen.x;
+                float dy = cur.y - prevScreen.y;
+                float len = std::sqrt(dx * dx + dy * dy);
+
+                // Skip degenerate or wrap-around segments
+                if (len > 0.5f && len < screenW * 0.5f)
                 {
-                    float thickness = 3.f * trail->attribs.trailScale;
-                    dl->AddLine(prevScreen, cur, col, thickness);
+                    float invLen = 1.f / len;
+                    // Perpendicular direction (points "left" of travel)
+                    float px = -dy * invLen;
+                    float py =  dx * invLen;
+
+                    // Four ribbon corners:
+                    // p1 = prevLeft, p2 = curLeft, p3 = curRight, p4 = prevRight
+                    ImVec2 p1{ prevScreen.x + px * prevHalfW, prevScreen.y + py * prevHalfW };
+                    ImVec2 p2{ cur.x        + px * halfW,     cur.y        + py * halfW     };
+                    ImVec2 p3{ cur.x        - px * halfW,     cur.y        - py * halfW     };
+                    ImVec2 p4{ prevScreen.x - px * prevHalfW, prevScreen.y - py * prevHalfW };
+
+                    float avgA = (prevA + pointA) * 0.5f;
+
+                    // Advance V so that one full tile covers the same distance
+                    // as one trail width — keeps the texture looking square.
+                    float avgHalfW = (prevHalfW + halfW) * 0.5f;
+                    float dvRange  = (avgHalfW > 0.001f) ? (len / (avgHalfW * 2.f)) : 0.f;
+                    float uvVNext  = uvV + dvRange;
+
+                    if (texRes)
+                    {
+                        ImU32 tint = IM_COL32(255, 255, 255, (uint8_t)(avgA * 255.f));
+                        // p1=prevLeft  uv=(0,uvV)
+                        // p2=curLeft   uv=(0,uvVNext)
+                        // p3=curRight  uv=(1,uvVNext)
+                        // p4=prevRight uv=(1,uvV)
+                        dl->AddImageQuad(
+                            (ImTextureID)(void*)texRes,
+                            p1, p2, p3, p4,
+                            ImVec2(0.f, uvV),     ImVec2(0.f, uvVNext),
+                            ImVec2(1.f, uvVNext), ImVec2(1.f, uvV),
+                            tint);
+                    }
+                    else
+                    {
+                        // No texture — solid colour quad tinted by trail colour
+                        ImU32 col = ToImColor(trail->attribs.trailColor, avgA);
+                        dl->AddQuadFilled(p1, p2, p3, p4, col);
+                    }
+
+                    uvV = uvVNext;
                 }
             }
 
-            // Dot at trail point
-            float dotRadius = 4.f * trail->attribs.trailScale;
-            dl->AddCircleFilled(cur, dotRadius, col, 8);
-
             prevScreen = cur;
-            hasPrev    = true;
+            prevHalfW  = halfW;
+            prevA      = pointA;
+            hasPrev    = (pointA > 0.01f);
         }
     }
 }

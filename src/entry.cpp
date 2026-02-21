@@ -71,6 +71,34 @@ static void RenderOptions()
     UI::RenderOptions();
 }
 
+// Quick-access right-click context menu — toggle markers and trails.
+static void RenderQAContextMenu()
+{
+    if (ImGui::MenuItem("Show Markers", nullptr, g_Settings.RenderMarkers))
+    {
+        g_Settings.RenderMarkers = !g_Settings.RenderMarkers;
+        g_Settings.Save();
+    }
+    if (ImGui::MenuItem("Show Trails", nullptr, g_Settings.RenderTrails))
+    {
+        g_Settings.RenderTrails = !g_Settings.RenderTrails;
+        g_Settings.Save();
+    }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Show All"))
+    {
+        g_Settings.RenderMarkers = true;
+        g_Settings.RenderTrails  = true;
+        g_Settings.Save();
+    }
+    if (ImGui::MenuItem("Hide All"))
+    {
+        g_Settings.RenderMarkers = false;
+        g_Settings.RenderTrails  = false;
+        g_Settings.Save();
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Addon lifecycle
 // ─────────────────────────────────────────────────────────────────────────────
@@ -109,6 +137,7 @@ static void AddonLoad(AddonAPI_t* aApi)
                           "ICON_PATHING_HOVER",
                           "KB_PATHING_TOGGLEWIN",
                           "Pathing");
+    aApi->QuickAccess_AddContextMenu("QA_PATHING_CTX", "QA_PATHING", RenderQAContextMenu);
 
     // ── Start loading packs (background thread) ────────────────────────────────
     PackManager::Init();
@@ -133,6 +162,7 @@ static void AddonUnload()
     APIDefs->InputBinds_Deregister("KB_PATHING_TOGGLETRAILS");
 
     APIDefs->QuickAccess_Remove("QA_PATHING");
+    APIDefs->QuickAccess_RemoveContextMenu("QA_PATHING_CTX");
 
     APIDefs    = nullptr;
     MumbleLink = nullptr;
@@ -150,7 +180,7 @@ extern "C" __declspec(dllexport) AddonDefinition_t* GetAddonDef()
     s_AddonDef.Signature   = 0x50415448; // "PATH" in ASCII
     s_AddonDef.APIVersion  = NEXUS_API_VERSION;
     s_AddonDef.Name        = "Pathing";
-    s_AddonDef.Version     = { 1, 0, 0, 0 };
+    s_AddonDef.Version     = { 1, 0, 0, 1 };
     s_AddonDef.Author      = ""; // fill in your name
     s_AddonDef.Description = "TacO / BlishHUD compatible pathing pack renderer for Nexus.";
     s_AddonDef.Load        = AddonLoad;

@@ -15,8 +15,10 @@ struct Settings
     float MarkerOpacity   = 1.0f;   // global opacity multiplier for markers
     float TrailOpacity    = 0.8f;   // global opacity multiplier for trails
     float MarkerScale     = 1.0f;   // global size multiplier
+    float TrailWidth      = 1.0f;   // trail half-width in world units (for perspective scaling)
+    bool  TrailPerspectiveScale = true; // scale trail width with distance like markers
     float MaxRenderDist   = 5000.f; // world-units — don't draw beyond this
-    float FadeStartDist   = 3000.f; // begin fading at this distance
+    float FadeStartDist   = 0.f;    // begin fading at this distance (0 = fade from the start)
     float MinScreenSize   = 8.f;    // px — don't render icons smaller than this
     float MaxScreenSize   = 64.f;   // px — clamp icon screen size to this
     bool  ShowDebugInfo   = false;  // overlay debug text (fps, marker counts)
