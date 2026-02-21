@@ -360,33 +360,48 @@ static void ParsePois(const pugi::xml_node& poisNode, TacoPack& out)
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-void ParseXml(const std::string& xmlContent, TacoPack& out)
+// Helper: get the OverlayData root node from a parsed document.
+static pugi::xml_node GetOverlayRoot(const pugi::xml_document& doc)
+{
+    pugi::xml_node root = doc.child("OverlayData");
+    if (!root) root = doc.first_child();
+    return root;
+}
+
+void ParseXmlCategories(const std::string& xmlContent, TacoPack& out)
 {
     pugi::xml_document doc;
-    pugi::xml_parse_result result = doc.load_string(xmlContent.c_str());
-    if (!result) return; // malformed XML
-
-    // The root may be <OverlayData> directly or there may be an enclosing wrapper.
-    pugi::xml_node root = doc.child("OverlayData");
-    if (!root) root = doc.first_child(); // some packs omit the standard root
-
-    // ── Build category tree from all <MarkerCategory> children ───────────────
+    if (!doc.load_string(xmlContent.c_str())) return;
+    pugi::xml_node root = GetOverlayRoot(doc);
+    if (!root) return;
     MarkerAttribs defaultAttribs;
     BuildCategoryTree(root, out.categories, defaultAttribs);
+}
 
-    // ── Also look for <MarkerCategory> children on <OverlayData> sub-nodes ───
-    // Some packs nest everything under a second level root node.
+void ParseXmlPois(const std::string& xmlContent, TacoPack& out)
+{
+    pugi::xml_document doc;
+    if (!doc.load_string(xmlContent.c_str())) return;
+    pugi::xml_node root = GetOverlayRoot(doc);
+    if (!root) return;
+
     for (const pugi::xml_node& child : root.children())
     {
-        std::string childName = child.name();
-        if (childName == "POIs")
-        {
+        if (std::string(child.name()) == "POIs")
             ParsePois(child, out);
-        }
     }
-
     // Flat <POI>/<Trail> directly under root (non-standard but seen in the wild)
     ParsePois(root, out);
+}
+
+void ParseXml(const std::string& xmlContent, TacoPack& out)
+{
+    // Single-pass: build categories then parse POIs/trails.
+    // For multi-file packs prefer the two-pass helpers (ParseXmlCategories +
+    // ParseXmlPois) so that all category definitions are available regardless
+    // of iteration order.
+    ParseXmlCategories(xmlContent, out);
+    ParseXmlPois(xmlContent, out);
 }
 
 bool LoadTrailBinary(const std::string& absolutePath, Trail& trail)
@@ -417,7 +432,10 @@ bool LoadTrailBinaryMemory(const void* data, size_t size, Trail& trail)
     ptr  += 4;
     size -= 4;
 
-    if (size % 12 != 0) return false; // must be a multiple of 3 floats
+    // Truncate any leftover bytes rather than rejecting the whole file;
+    // some packs write a null-terminator or alignment padding at the end.
+    size -= (size % 12);
+    if (size == 0) return false;
 
     size_t count = size / 12;
     trail.points.reserve(trail.points.size() + count);

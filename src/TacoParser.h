@@ -17,6 +17,16 @@ namespace TacoParser
 // The pack's extractedFiles map is used to resolve trail binary paths.
 void ParseXml(const std::string& xmlContent, TacoPack& out);
 
+// Two-pass helpers — use these when loading a pack with multiple XML files
+// so that category definitions from one file are available to POI/trail
+// parsers in all other files regardless of iteration order.
+
+// Pass 1: build only the MarkerCategory tree; do not parse POIs or Trails.
+void ParseXmlCategories(const std::string& xmlContent, TacoPack& out);
+
+// Pass 2: parse only POIs and Trails; assumes categories already built.
+void ParseXmlPois(const std::string& xmlContent, TacoPack& out);
+
 // Load the binary trail data from a .trl file on disk and fill trail.points.
 // Returns true on success.
 bool LoadTrailBinary(const std::string& absolutePath, Trail& trail);

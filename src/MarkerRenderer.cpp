@@ -93,14 +93,18 @@ static ImU32 ToImColor(uint32_t argb, float globalAlpha)
 }
 
 // Distance-based alpha fade.
+// Pack attributes (fadeNear/fadeFar) can only shorten the visible range,
+// never extend it past globalMaxDist — so the render-distance slider is
+// always the hard upper bound.
 static float FadeAlpha(float dist, float fadeNear, float fadeFar,
                        float globalFadeStart, float globalMaxDist)
 {
     // NOTE: 'near' and 'far' are Windows macros — use different names.
-    float distNear = (fadeNear >= 0.f) ? fadeNear : globalFadeStart;
-    float distFar  = (fadeFar  >= 0.f) ? fadeFar  : globalMaxDist;
-    if (dist >= distFar)  return 0.f;
-    if (dist <= distNear) return 1.f;
+    // Cap distFar so packs with fadeFar=100000 don't break the slider.
+    float distFar  = (fadeFar  >= 0.f) ? std::min(fadeFar,  globalMaxDist) : globalMaxDist;
+    float distNear = (fadeNear >= 0.f) ? std::min(fadeNear, distFar)       : std::min(globalFadeStart, distFar);
+    if (dist >= distFar  || distFar <= 0.f) return 0.f;
+    if (dist <= distNear || distFar <= distNear) return 1.f;
     return 1.f - (dist - distNear) / (distFar - distNear);
 }
 

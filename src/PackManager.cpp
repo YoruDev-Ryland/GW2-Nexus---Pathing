@@ -152,11 +152,17 @@ static bool ExtractTacoPack(const std::string& tacoPath, const std::string& extr
 }
 
 // Parse all XML files within an extracted pack directory.
+// Uses a two-pass strategy so that MarkerCategory definitions from any file
+// are always available when POIs and Trails in other files are resolved —
+// regardless of the iteration order of the unordered_map.
 static void ParseExtractedXmls(TacoPack& pack)
 {
+    // Collect XML contents up-front (avoids re-opening files for pass 2).
+    std::vector<std::string> xmlContents;
+    xmlContents.reserve(32);
+
     for (const auto& [normPath, absPath] : pack.extractedFiles)
     {
-        // Only process XML files
         if (normPath.size() < 4) continue;
         std::string ext = normPath.substr(normPath.size() - 4);
         std::transform(ext.begin(), ext.end(), ext.begin(),
@@ -166,10 +172,17 @@ static void ParseExtractedXmls(TacoPack& pack)
         std::ifstream f(absPath);
         if (!f.is_open()) continue;
 
-        std::string content((std::istreambuf_iterator<char>(f)),
-                             std::istreambuf_iterator<char>());
-        TacoParser::ParseXml(content, pack);
+        xmlContents.emplace_back((std::istreambuf_iterator<char>(f)),
+                                  std::istreambuf_iterator<char>());
     }
+
+    // Pass 1 — build the complete category tree from every XML file.
+    for (const auto& content : xmlContents)
+        TacoParser::ParseXmlCategories(content, pack);
+
+    // Pass 2 — parse POIs and Trails (category tree is now fully populated).
+    for (const auto& content : xmlContents)
+        TacoParser::ParseXmlPois(content, pack);
 }
 
 // Collect all icon / trail texture paths from a pack into the pending queue.
